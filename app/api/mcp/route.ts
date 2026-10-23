@@ -1,75 +1,73 @@
-import { NextRequest } from 'next/server';
+import { NextResponse } from "next/server";
+import { SEED_HABITS, currentStreak } from "@/lib/habits";
 
-export const runtime = 'edge';
+// Stateless JSON-RPC MCP endpoint. Habit checks live only in each visitor's browser, so the server knows the starter
+// lanes and the streak rule, nothing else: no tool can read or change anyone's habits.
 
-interface MCPRequest {
-  jsonrpc: '2.0';
-  id: number | string;
-  method: string;
-  params?: any;
-}
+type RpcRequest = { id?: number | string | null; method?: string; params?: { name?: string; arguments?: Record<string, unknown> } };
 
-interface MCPResponse {
-  jsonrpc: '2.0';
-  id: number | string;
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-  };
-}
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-async function getData() {
-  return { message: 'Sample data' };
-}
+const TOOLS = [
+  { name: "get_starter_lanes", description: "The three starter habit lanes a new visitor sees", inputSchema: { type: "object", properties: {} } },
+  {
+    name: "streak",
+    description: "Apply the page's streak rule to a list of checked days (YYYY-MM-DD) as of a given day",
+    inputSchema: {
+      type: "object",
+      properties: { checked: { type: "array", items: { type: "string" } }, today: { type: "string" } },
+      required: ["checked", "today"],
+    },
+  },
+];
 
-export async function POST(request: NextRequest) {
-  let requestId: number | string = 0;
-
-  try {
-    const body: MCPRequest = await request.json();
-    requestId = body.id;
-    const { method, params, id } = body;
-
-    let result: any = {};
-
-    switch (method) {
-      case 'initialize':
-        result = {
-          protocolVersion: '2024-11-05',
-          capabilities: { tools: {} },
-          serverInfo: { name: 'MCP Server', version: '1.0.0' }
-        };
-        break;
-
-      case 'tools/list':
-        result = {
-          tools: [
-            {
-              name: 'get_data',
-              description: 'Get sample data',
-              inputSchema: { type: 'object', properties: {} }
-            }
-          ]
-        };
-        break;
-
-      case 'tools/call':
-        result = await getData();
-        break;
-
-      default:
-        throw new Error(`Unknown method: ${method}`);
-    }
-
-    return Response.json({ jsonrpc: '2.0', id, result });
-
-  } catch (error) {
-    return Response.json({
-      jsonrpc: '2.0',
-      id: requestId,
-      error: { code: -32603, message: error instanceof Error ? error.message : 'Internal error' }
-    }, { status: 500 });
+class RpcError extends Error {
+  constructor(readonly code: number, message: string) {
+    super(message);
   }
 }
 
+function callTool(name: string | undefined, args: Record<string, unknown> = {}) {
+  switch (name) {
+    case "get_starter_lanes":
+      return { lanes: SEED_HABITS.map(({ id, name: label }) => ({ id, name: label })) };
+    case "streak": {
+      const { checked, today } = args;
+      if (typeof today !== "string" || !DAY.test(today)) throw new RpcError(-32602, "today must be YYYY-MM-DD");
+      if (!Array.isArray(checked) || !checked.every((day) => typeof day === "string" && DAY.test(day))) {
+        throw new RpcError(-32602, "checked must be a list of YYYY-MM-DD days");
+      }
+      const checks = Object.fromEntries((checked as string[]).map((day) => [day, true]));
+      return { today, streak: currentStreak(checks, today) };
+    }
+    default:
+      throw new RpcError(-32602, `Unknown tool: ${String(name)}`);
+  }
+}
+
+export async function POST(request: Request) {
+  let id: RpcRequest["id"] = null;
+  try {
+    const body = (await request.json()) as RpcRequest;
+    id = body.id ?? null;
+    let result: unknown;
+    switch (body.method) {
+      case "initialize":
+        result = { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "Habit Patchbay", version: "1.0.0" } };
+        break;
+      case "tools/list":
+        result = { tools: TOOLS };
+        break;
+      case "tools/call":
+        result = callTool(body.params?.name, body.params?.arguments);
+        break;
+      default:
+        throw new RpcError(-32601, `Unknown method: ${String(body.method)}`);
+    }
+    return NextResponse.json({ jsonrpc: "2.0", id, result });
+  } catch (error) {
+    const code = error instanceof RpcError ? error.code : -32700;
+    const message = error instanceof RpcError ? error.message : "Parse error";
+    return NextResponse.json({ jsonrpc: "2.0", id, error: { code, message } }, { status: 400 });
+  }
+}
