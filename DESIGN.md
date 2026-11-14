@@ -1,3 +1,13 @@
+# Habits — design
+
+Since 2026-11-14 this app uses the shared App shell (`APP-SHELL.md`): two views in the sidebar
+(pills on phones). Today is a checklist with round checks, streaks and a "done today" summary
+card; Last 14 days gives each habit a card with a grid of tappable days (two weeks of seven,
+wrapping at 44px on the narrowest phones). Removing a habit is undoable. Anything that depends
+on the visitor's today renders after hydration. The earlier "patchbay" theme below is kept for history.
+
+---
+
 ---
 name: Habit Tracker Patchbay
 description: A black-glass 14-day signal schedule for keeping daily habits connected.
