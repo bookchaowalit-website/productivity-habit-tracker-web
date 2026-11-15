@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SEED_HABITS, addHabit, completedOn, currentStreak, dateKey, daysBack, parseHabits, removeHabit, signalsIn, toggleCheck } from "@/lib/habits";
+import { SEED_HABITS, addHabit, completedOn, currentStreak, dateKey, dayParts, daysBack, longDay, parseHabits, removeHabit, restoreHabit, signalsIn, streakLabel, toggleCheck } from "@/lib/habits";
 
 describe("dates", () => {
   it("formats the local calendar day", () => {
@@ -75,5 +75,24 @@ describe("parseHabits", () => {
       { id: "a", name: "Ok", checks: { "2026-10-23": true } },
       { id: "b", name: "No checks", checks: {} },
     ]);
+  });
+});
+
+describe("App shell helpers", () => {
+  const a = { id: "a", name: "A", checks: {} };
+  const b = { id: "b", name: "B", checks: {} };
+
+  it("restoreHabit puts a lane back before its neighbour, at the end without one, and never twice", () => {
+    expect(restoreHabit([b], a, "b").map((h) => h.id)).toEqual(["a", "b"]);
+    expect(restoreHabit([b], a, null).map((h) => h.id)).toEqual(["b", "a"]);
+    expect(restoreHabit([b], a, "gone").map((h) => h.id)).toEqual(["b", "a"]);
+    expect(restoreHabit([a, b], a, "b")).toHaveLength(2);
+  });
+
+  it("longDay, dayParts and streakLabel", () => {
+    expect(longDay("2026-11-14")).toBe("Saturday 14 November");
+    expect(dayParts("2026-11-14")).toEqual({ weekday: "Sat", day: 14 });
+    expect(streakLabel(0)).toBe("No streak yet");
+    expect(streakLabel(3)).toBe("3-day streak");
   });
 });

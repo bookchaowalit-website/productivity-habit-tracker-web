@@ -3,17 +3,20 @@ import { describe, expect, it } from "vitest";
 import Home from "@/app/page";
 
 describe("home page", () => {
-  it("renders the patchbay, the starter lanes and the local-only notice", () => {
+  it("renders the App shell, the starter habits and the local-only note", () => {
     const html = renderToString(<Home />);
-    expect(html).toContain("Keep the circuit alive.");
+    expect(html).toContain("Today");
     expect(html).toContain("Move for 20 min");
-    expect(html).toContain("no account · no sync");
-    expect(html).toContain("Data stays on this device.");
+    expect(html).toContain("New habit");
+    expect(html).toContain("Saved in this browser only");
   });
 
-  it("renders no date cells on the server, so the static build cannot disagree with the visitor's today", () => {
+  it("renders nothing that depends on today on the server, so the static build cannot disagree with the visitor", () => {
     const html = renderToString(<Home />);
-    expect(html).not.toContain(">NOW<");
-    expect(html).not.toMatch(/Mark Move for 20 min on \d{4}-/);
+    expect(html).not.toContain("done today");
+    expect(html).not.toContain("day streak");
+    expect(html).not.toContain("No streak yet");
+    expect(html).toContain("3 habits");
+    expect(html).toMatch(/aria-label="Done today: Move for 20 min" disabled=""|disabled="" aria-label="Done today: Move for 20 min"/);
   });
 });

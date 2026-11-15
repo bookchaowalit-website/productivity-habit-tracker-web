@@ -118,3 +118,25 @@ export const todayStore = {
     return () => clearInterval(timer);
   },
 };
+
+/** Put a removed lane back before its old neighbour (or at the end when the neighbour is gone); never twice. */
+export function restoreHabit(habits: Habit[], habit: Habit, beforeId: string | null): Habit[] {
+  if (habits.some((entry) => entry.id === habit.id)) return habits;
+  const at = beforeId ? habits.findIndex((entry) => entry.id === beforeId) : -1;
+  return at < 0 ? [...habits, habit] : [...habits.slice(0, at), habit, ...habits.slice(at)];
+}
+
+/** "Saturday, 14 November" for a day key, in the visitor's own calendar. */
+export function longDay(key: string): string {
+  return fromKey(key).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+}
+
+/** Short pieces for a day cell: weekday letter(s) and day of month. */
+export function dayParts(key: string): { weekday: string; day: number } {
+  const date = fromKey(key);
+  return { weekday: date.toLocaleDateString("en-GB", { weekday: "short" }), day: date.getDate() };
+}
+
+export function streakLabel(days: number): string {
+  return days === 0 ? "No streak yet" : `${days}-day streak`;
+}
