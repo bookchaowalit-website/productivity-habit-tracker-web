@@ -274,5 +274,6 @@
 .as-day:hover { border-color: var(--as-muted); }
 .as-day[data-today="true"] { border: 2px solid var(--as-button); }
 .as-day[aria-pressed="true"] { border-color: var(--as-button); background: var(--as-button); color: #ffffff; }
-.as-day[aria-pressed="true"] span { color: rgb(255 255 255 / 90%); }
+/* Solid white: 90% white on --as-button drops to about 4.2:1. */
+.as-day[aria-pressed="true"] span { color: #ffffff; }
 .as-day[aria-pressed="true"][data-today="true"] { box-shadow: inset 0 0 0 2px var(--as-surface); }
