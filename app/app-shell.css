@@ -273,7 +273,7 @@
 .as-habit { container-type: inline-size; }
 .as-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; margin: 0; padding: 0 16px 16px; list-style: none; }
 @container (min-width: 380px) { .as-days { grid-template-columns: repeat(7, minmax(44px, 1fr)); } }
-.as-day { display: grid; place-items: center; gap: 0; width: 100%; min-height: 52px; padding: 4px 0; border: 1px solid var(--as-line); border-radius: 12px; background: var(--as-bg); cursor: pointer; }
+.as-day { display: grid; place-items: center; gap: 0; width: 100%; min-height: 52px; padding: 4px 0; border: 1px solid var(--as-field-line); border-radius: 12px; background: var(--as-bg); cursor: pointer; }
 .as-day span { color: var(--as-muted); font-size: 12px; font-weight: 500; }
 .as-day strong { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .as-day:hover { border-color: var(--as-muted); }
