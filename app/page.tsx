@@ -8,6 +8,9 @@ import {
 } from "@/lib/habits";
 
 type View = "Today" | "History";
+type RemovedEntry = { habit: Habit; beforeId: string | null };
+type RemovedBatch = { items: RemovedEntry[]; viaKeyboard: boolean };
+const removedLabel = (items: RemovedEntry[]) => (items.length === 1 ? `Removed “${items[0].habit.name}”` : `Removed ${items.length} habits`);
 
 // randomUUID only exists in secure contexts (HTTPS/localhost) and newer browsers.
 function createId(): string {
@@ -27,7 +30,11 @@ export default function Home() {
   const [view, setView] = useState<View>("Today");
   const [composing, setComposing] = useState(false);
   const [name, setName] = useState("");
-  const [removed, setRemoved] = useState<{ habit: Habit; beforeId: string | null; viaKeyboard: boolean } | null>(null);
+  // Every removal still inside the Undo window: one Undo puts them all back where they were.
+  const [removed, setRemovedState] = useState<RemovedBatch | null>(null);
+  // The latest batch, so two removals before a re-render still both land in it.
+  const removedRef = useRef<RemovedBatch | null>(null);
+  const setRemoved = (batch: RemovedBatch | null) => { removedRef.current = batch; setRemovedState(batch); };
   const [toastFocused, setToastFocused] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
@@ -45,10 +52,10 @@ export default function Home() {
     wasComposing.current = composing;
   }, [composing]);
   useEffect(() => { if (removed?.viaKeyboard) undoRef.current?.focus(); }, [removed]);
-  // The toast closes after 6 s, but never while it holds focus.
+  // The toast closes 6 s after the latest removal (each removal restarts it), but never while it holds focus.
   useEffect(() => {
     if (!removed || toastFocused) return;
-    const timer = window.setTimeout(() => setRemoved(null), 6000);
+    const timer = window.setTimeout(() => { removedRef.current = null; setRemovedState(null); }, 6000);
     return () => window.clearTimeout(timer);
   }, [removed, toastFocused]);
 
@@ -70,10 +77,18 @@ export default function Home() {
     setAnnouncement(`${habit.name}: ${wasDone ? "not done" : "done"} on ${longDay(day)}.`);
   }
   function remove(habit: Habit, viaKeyboard: boolean) {
-    const index = habits.findIndex((entry) => entry.id === habit.id);
-    habitStore.update((current) => removeHabit(current, habit.id));
-    setRemoved({ habit, beforeId: habits[index + 1]?.id ?? null, viaKeyboard });
-    setAnnouncement(`Removed “${habit.name}”. Undo is available for a few seconds.`);
+    // Read the habit (with its latest check-ins) and its neighbour inside the same store update.
+    let entry: RemovedEntry | undefined;
+    habitStore.update((current) => {
+      const index = current.findIndex((item) => item.id === habit.id);
+      if (index < 0) return current;
+      entry = { habit: current[index], beforeId: current[index + 1]?.id ?? null };
+      return removeHabit(current, habit.id);
+    });
+    if (!entry) return;
+    const items = [...(removedRef.current?.items ?? []), entry];
+    setRemoved({ items, viaKeyboard });
+    setAnnouncement(`${removedLabel(items)}. Undo is available for a few seconds.`);
   }
   function closeToast() {
     setRemoved(null);
@@ -81,10 +96,11 @@ export default function Home() {
     (newRef.current ?? nameRef.current)?.focus();
   }
   function undo() {
-    if (!removed) return;
-    const { habit, beforeId } = removed;
-    habitStore.update((current) => restoreHabit(current, habit, beforeId));
-    setAnnouncement(`Restored “${habit.name}”.`);
+    const items = removedRef.current?.items;
+    if (!items?.length) return;
+    // Latest removal first, so each habit goes back before the row that followed it at the time.
+    habitStore.update((current) => items.reduceRight((list, { habit, beforeId }) => restoreHabit(list, habit, beforeId), current));
+    setAnnouncement(items.length === 1 ? `Restored “${items[0].habit.name}”.` : `Restored ${items.length} habits.`);
     closeToast();
   }
 
@@ -210,8 +226,8 @@ export default function Home() {
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setToastFocused(false); }}
           onKeyDown={(event) => { if (event.key === "Escape") closeToast(); }}
         >
-          <span>Removed “{removed.habit.name}”</span>
-          <button ref={undoRef} type="button" className="as-plain" onClick={undo}>Undo</button>
+          <span>{removedLabel(removed.items)}</span>
+          <button ref={undoRef} type="button" className="as-plain" onClick={undo} aria-label={removed.items.length === 1 ? "Undo remove" : `Undo remove of ${removed.items.length} habits`}>Undo</button>
         </div>
       ) : null}
 

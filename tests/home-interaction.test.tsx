@@ -126,4 +126,26 @@ describe("remove and undo", () => {
     press(button("Undo"));
     expect(document.activeElement).toBe($(".as-composer input"));
   });
+
+  it("removals inside the Undo window form one batch; Undo restores all, with their check-ins, in place", () => {
+    act(() => { $<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.click(); });
+    expect(saved().find((h: { name: string }) => h.name === "Read before bed").checks[TODAY]).toBeTruthy();
+    const ticked = JSON.stringify(saved());
+    vi.useFakeTimers();
+    press($('[aria-label="Remove Read before bed"]')!, 0);
+    act(() => { vi.advanceTimersByTime(4000); });
+    press($('[aria-label="Remove Move for 20 min"]')!, 0);
+    expect(rowNames()).toEqual(["One deep-work block"]);
+    expect($(".as-toast span")!.textContent).toBe("Removed 2 habits");
+    expect(host.querySelector('[role="status"]')!.textContent).toContain("Removed 2 habits");
+    expect(button("Undo").getAttribute("aria-label")).toBe("Undo remove of 2 habits");
+    // The second removal restarted the timer: 4 s + 4 s after the first, the toast is still open.
+    act(() => { button("New habit").focus(); });
+    act(() => { vi.advanceTimersByTime(4000); });
+    expect($(".as-toast")).not.toBeNull();
+    press(button("Undo"));
+    expect(rowNames()).toEqual(["Move for 20 min", "Read before bed", "One deep-work block"]);
+    expect(JSON.stringify(saved())).toBe(ticked);
+    expect(host.querySelector('[role="status"]')!.textContent).toBe("Restored 2 habits.");
+  });
 });
