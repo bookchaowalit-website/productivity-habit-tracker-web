@@ -120,6 +120,17 @@ describe("remove and undo", () => {
     expect(rowNames()).toEqual(["Move for 20 min", "Read before bed", "One deep-work block", "Drink water"]);
   });
 
+  it("remove the only habit, add one, then Undo puts the removed habit back first", () => {
+    for (const name of ["Move for 20 min", "Read before bed"]) press($(`[aria-label="Remove ${name}"]`)!, 1);
+    act(() => { $(".as-toast")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    press($('[aria-label="Remove One deep-work block"]')!, 1);
+    press(button("New habit"));
+    type($<HTMLInputElement>(".as-composer input")!, "Drink water");
+    press(button("Add", $(".as-composer")!));
+    press(button("Undo"));
+    expect(rowNames()).toEqual(["One deep-work block", "Drink water"]);
+  });
+
   it("while the toast shows, the page reserves bottom space and scroll padding for it; closing releases it", () => {
     const space = () => document.documentElement.style.getPropertyValue("--as-toast-space");
     expect(space()).toBe("");

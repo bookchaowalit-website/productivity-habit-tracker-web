@@ -8,7 +8,7 @@ import {
 } from "@/lib/habits";
 
 type View = "Today" | "History";
-type RemovedEntry = { habit: Habit; beforeId: string | null; afterId: string | null };
+type RemovedEntry = { habit: Habit; beforeId: string | null; afterId: string | null; index: number };
 type RemovedBatch = { items: RemovedEntry[]; viaKeyboard: boolean };
 const removedLabel = (items: RemovedEntry[]) => (items.length === 1 ? `Removed “${items[0].habit.name}”` : `Removed ${items.length} habits`);
 
@@ -98,7 +98,7 @@ export default function Home() {
     habitStore.update((current) => {
       const index = current.findIndex((item) => item.id === habit.id);
       if (index < 0) return current;
-      entry = { habit: current[index], beforeId: current[index + 1]?.id ?? null, afterId: current[index - 1]?.id ?? null };
+      entry = { habit: current[index], beforeId: current[index + 1]?.id ?? null, afterId: current[index - 1]?.id ?? null, index };
       return removeHabit(current, habit.id);
     });
     if (!entry) return;
@@ -115,7 +115,7 @@ export default function Home() {
     const items = removedRef.current?.items;
     if (!items?.length) return;
     // Latest removal first, so each habit goes back before the row that followed it at the time.
-    habitStore.update((current) => items.reduceRight((list, { habit, beforeId, afterId }) => restoreHabit(list, habit, beforeId, afterId), current));
+    habitStore.update((current) => items.reduceRight((list, { habit, beforeId, afterId, index }) => restoreHabit(list, habit, beforeId, afterId, index), current));
     setAnnouncement(items.length === 1 ? `Restored “${items[0].habit.name}”.` : `Restored ${items.length} habits.`);
     closeToast();
   }

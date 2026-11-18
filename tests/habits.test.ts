@@ -96,6 +96,11 @@ describe("App shell helpers", () => {
     expect(restoreHabit([c], b, null, "gone").map((h) => h.id)).toEqual(["c", "b"]);
   });
 
+  it("restoreHabit puts a lone removed row back at its old index, before rows added since", () => {
+    expect(restoreHabit([b], a, null, null, 0).map((h) => h.id)).toEqual(["a", "b"]);
+    expect(restoreHabit([b], a, null, null, 5).map((h) => h.id)).toEqual(["b", "a"]);
+  });
+
   it("longDay, dayParts and streakLabel", () => {
     expect(longDay("2026-11-14")).toBe("Saturday 14 November");
     expect(dayParts("2026-11-14")).toEqual({ weekday: "Sat", day: 14 });

@@ -120,12 +120,14 @@ export const todayStore = {
 };
 
 /** Put a removed lane back before its old neighbour (or at the end when the neighbour is gone); never twice. */
-export function restoreHabit(habits: Habit[], habit: Habit, beforeId: string | null, afterId: string | null = null): Habit[] {
+export function restoreHabit(habits: Habit[], habit: Habit, beforeId: string | null, afterId: string | null = null, index?: number): Habit[] {
   if (habits.some((entry) => entry.id === habit.id)) return habits;
-  // Before the old next row; else right after the old previous row (so rows added since stay after it); else at the end.
+  // Before the old next row; else right after the old previous row (so rows added since stay after it); else at its
+  // old index (a lone row comes back before rows added since); else at the end.
   const before = beforeId ? habits.findIndex((entry) => entry.id === beforeId) : -1;
   const after = before < 0 && afterId ? habits.findIndex((entry) => entry.id === afterId) : -1;
-  const at = before >= 0 ? before : after >= 0 ? after + 1 : habits.length;
+  const fallback = index === undefined ? habits.length : Math.min(Math.max(index, 0), habits.length);
+  const at = before >= 0 ? before : after >= 0 ? after + 1 : fallback;
   return [...habits.slice(0, at), habit, ...habits.slice(at)];
 }
 
