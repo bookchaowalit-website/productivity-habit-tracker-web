@@ -282,3 +282,6 @@
 /* Solid white: 90% white on --as-button drops to about 4.2:1. */
 .as-day[aria-pressed="true"] span { color: #ffffff; }
 .as-day[aria-pressed="true"][data-today="true"] { box-shadow: inset 0 0 0 2px var(--as-surface); }
+
+/* The top bar is sticky: keep skip-link targets and keyboard-focused controls clear of it when the page scrolls to them. */
+html { scroll-padding-top: 64px; scroll-padding-bottom: 16px; }
