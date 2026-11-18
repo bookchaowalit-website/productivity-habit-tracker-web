@@ -214,7 +214,7 @@ export default function Home() {
                       const done = Boolean(habit.checks[day]);
                       return (
                         <li key={day}>
-                          <button type="button" className="as-day" aria-pressed={done} aria-label={`${habit.name}, ${long}`} data-today={day === today ? "true" : undefined} onClick={() => toggle(habit, day)}>
+                          <button type="button" className="as-day" aria-pressed={done} aria-label={`${habit.name}, ${long}`} data-today={day === today ? "true" : undefined} aria-current={day === today ? "date" : undefined} onClick={() => toggle(habit, day)}>
                             <span>{weekday}</span>
                             <strong>{date}</strong>
                           </button>

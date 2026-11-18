@@ -62,6 +62,8 @@ describe("last 14 days", () => {
     const move = $(".as-habit")!;
     expect(move.querySelectorAll(".as-day")).toHaveLength(14);
     expect(move.querySelector('[data-today="true"]')!.getAttribute("aria-pressed")).toBe("false");
+    expect(move.querySelector('[data-today="true"]')!.getAttribute("aria-current")).toBe("date");
+    expect(move.querySelectorAll('[aria-current="date"]')).toHaveLength(1);
     const yesterday = [...move.querySelectorAll<HTMLButtonElement>(".as-day")].at(-2)!;
     press(yesterday);
     expect(yesterday.getAttribute("aria-pressed")).toBe("true");
@@ -129,6 +131,19 @@ describe("remove and undo", () => {
     press(button("Add", $(".as-composer")!));
     press(button("Undo"));
     expect(rowNames()).toEqual(["One deep-work block", "Drink water"]);
+  });
+
+  it("checked days carry a tick (not colour alone), and forced colors draw both checks with system colors", async () => {
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync(`${process.cwd()}/app/app-shell.css`, "utf8");
+    expect(css).toMatch(/\.as-day\[aria-pressed="true"\]::after \{[^}]*content: ""[^}]*border: solid currentColor/);
+    const block = css.indexOf("@media (forced-colors: active)");
+    expect(block).toBeGreaterThan(css.indexOf(".as-check input:checked + span {"));
+    expect(block).toBeGreaterThan(css.indexOf('.as-day[aria-pressed="true"] {'));
+    const rules = css.slice(block);
+    expect(rules).toContain("forced-color-adjust: none");
+    expect(rules).toMatch(/\.as-check input:checked \+ span::after \{[^}]*border: solid HighlightText/);
+    expect(rules).toMatch(/\.as-day\[aria-pressed="true"\] \{[^}]*background: Highlight; color: HighlightText/);
   });
 
   it("while the toast shows, the page reserves bottom space and scroll padding for it; closing releases it", () => {
