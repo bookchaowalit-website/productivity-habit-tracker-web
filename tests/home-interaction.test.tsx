@@ -56,6 +56,20 @@ describe("today", () => {
 });
 
 describe("last 14 days", () => {
+  it("a Today tick after midnight, before the screen refreshes, records the new day, not the day the page rendered", () => {
+    act(() => root.unmount());
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 18, 23, 59, 59));
+    root = createRoot(host);
+    act(() => root.render(<Home />));
+    vi.setSystemTime(new Date(2026, 10, 19, 0, 0, 1));
+    act(() => { $<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.click(); });
+    const checks = saved().find((h: { name: string }) => h.name === "Read before bed").checks;
+    expect(checks["2026-11-19"]).toBeTruthy();
+    expect(checks["2026-11-18"]).toBeFalsy();
+    expect($<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.checked).toBe(true);
+  });
+
   it("shows 14 days per habit, marks today, and a tap on yesterday counts toward the streak", () => {
     press(button("Last 14 days", $(".as-side")!));
     expect($("h1")!.textContent).toBe("Last 14 days");

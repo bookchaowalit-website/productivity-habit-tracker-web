@@ -87,6 +87,8 @@ export default function Home() {
     setAnnouncement(`Added “${name.trim()}”.`);
     closeComposer();
   }
+  // Today's checkbox passes the date read at the moment of the tap, not the render's `today`: a page left open past
+  // midnight must record the new day (the re-render after the write then shows the new day everywhere).
   function toggle(habit: Habit, day: string) {
     const wasDone = Boolean(habit.checks[day]);
     habitStore.update((current) => toggleCheck(current, habit.id, day));
@@ -186,7 +188,7 @@ export default function Home() {
                   return (
                     <li className="as-row as-row-check as-row-habit" key={habit.id}>
                       <label className="as-check">
-                        <input type="checkbox" checked={done} disabled={!today} aria-label={`Done today: ${habit.name}`} onChange={() => toggle(habit, today)} />
+                        <input type="checkbox" checked={done} disabled={!today} aria-label={`Done today: ${habit.name}`} onChange={() => toggle(habit, todayStore.getSnapshot())} />
                         <span aria-hidden="true" />
                       </label>
                       <div>

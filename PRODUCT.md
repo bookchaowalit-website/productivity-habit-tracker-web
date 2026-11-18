@@ -24,6 +24,18 @@ A portfolio visitor who wants to try a small daily habit grid.
 - No account, sync, reminders, history beyond the visible 14 days in the UI (older checks are kept but not shown), or charts.
 - Data stays in one browser on one device; clearing site data deletes it.
 
+## Known limits
+
+- **Undo is the only way back after a remove, and it lasts 6 seconds.** Removals made within the window form one batch,
+  and one Undo restores them all with their check-ins. The timer pauses while focus is inside the toast, but not while a
+  mouse pointer rests on it, so a mouse or touch user who waits longer than 6 seconds loses the habit and its history.
+  There is no trash or "recently removed" list: that would be a new feature, not a fix (decision 2026-11-18; the 6 s
+  batch Undo is the App shell design).
+- **Date rollover:** a tick on Today records the local date at the moment of the tap. The rest of the screen (header,
+  grid) moves to the new day on the next re-render or within a minute.
+- **Two open tabs:** each write builds on the latest saved data, but a tab only redraws when the browser delivers the
+  `storage` event, so for a moment a tab can show data another tab has already changed.
+
 ## Live URL and deploy state
 
 - Live: https://habit-tracker.bookchaowalit.com (HTTP 200 on 2026-10-23).
