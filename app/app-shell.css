@@ -284,4 +284,6 @@
 .as-day[aria-pressed="true"][data-today="true"] { box-shadow: inset 0 0 0 2px var(--as-surface); }
 
 /* The top bar is sticky: keep skip-link targets and keyboard-focused controls clear of it when the page scrolls to them. */
-html { scroll-padding-top: 64px; scroll-padding-bottom: 16px; }
+html { scroll-padding-top: 64px; scroll-padding-bottom: calc(16px + var(--as-toast-space, 0px)); }
+/* While the Undo toast shows, the page reserves its height (set from page.tsx) so nothing focusable stays under it. */
+.as { padding-bottom: var(--as-toast-space, 0px); }

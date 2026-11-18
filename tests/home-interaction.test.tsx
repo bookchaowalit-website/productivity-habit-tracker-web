@@ -110,6 +110,26 @@ describe("remove and undo", () => {
     expect(host.textContent).toContain("No habits yet");
   });
 
+  it("remove the last habit, add one, then Undo puts the removed habit back in its old place", () => {
+    press($('[aria-label="Remove One deep-work block"]')!, 1);
+    press(button("New habit"));
+    type($<HTMLInputElement>(".as-composer input")!, "Drink water");
+    press(button("Add", $(".as-composer")!));
+    expect(rowNames()).toEqual(["Move for 20 min", "Read before bed", "Drink water"]);
+    press(button("Undo"));
+    expect(rowNames()).toEqual(["Move for 20 min", "Read before bed", "One deep-work block", "Drink water"]);
+  });
+
+  it("while the toast shows, the page reserves bottom space and scroll padding for it; closing releases it", () => {
+    const space = () => document.documentElement.style.getPropertyValue("--as-toast-space");
+    expect(space()).toBe("");
+    press($('[aria-label="Remove Read before bed"]')!, 0);
+    expect(space()).toMatch(/^\d+px$/);
+    expect(parseInt(space(), 10)).toBeGreaterThanOrEqual(32);
+    act(() => { $(".as-toast")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(space()).toBe("");
+  });
+
   it("Escape dismisses; the toast waits while focused and closes six seconds after focus leaves; with the composer open focus goes to it", () => {
     press($('[aria-label="Remove Read before bed"]')!, 0);
     act(() => { $(".as-toast")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });

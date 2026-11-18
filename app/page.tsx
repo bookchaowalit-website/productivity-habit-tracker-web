@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { AppFoot, AppTop, ListButton, Pill, PlusIcon } from "@/components/app-shell";
 import {
   WINDOW_DAYS, addHabit, completedOn, currentStreak, dayParts, daysBack, habitStore, longDay, removeHabit, restoreHabit, signalsIn,
@@ -8,7 +8,7 @@ import {
 } from "@/lib/habits";
 
 type View = "Today" | "History";
-type RemovedEntry = { habit: Habit; beforeId: string | null };
+type RemovedEntry = { habit: Habit; beforeId: string | null; afterId: string | null };
 type RemovedBatch = { items: RemovedEntry[]; viaKeyboard: boolean };
 const removedLabel = (items: RemovedEntry[]) => (items.length === 1 ? `Removed “${items[0].habit.name}”` : `Removed ${items.length} habits`);
 
@@ -27,6 +27,8 @@ export default function Home() {
   const today = useSyncExternalStore(todayStore.subscribe, todayStore.getSnapshot, todayStore.getServerSnapshot);
   const habits = useSyncExternalStore(habitStore.subscribe, habitStore.getSnapshot, habitStore.getServerSnapshot);
   const days = useMemo(() => (today ? daysBack(WINDOW_DAYS, today) : []), [today]);
+  // Format each day once per window, shared by every habit card (not 14 × habits calls per render).
+  const dayLabels = useMemo(() => days.map((key) => ({ key, ...dayParts(key), long: longDay(key) })), [days]);
   const [view, setView] = useState<View>("Today");
   const [composing, setComposing] = useState(false);
   const [name, setName] = useState("");
@@ -40,6 +42,7 @@ export default function Home() {
   const nameRef = useRef<HTMLInputElement>(null);
   const newRef = useRef<HTMLButtonElement>(null);
   const undoRef = useRef<HTMLButtonElement>(null);
+  const toastRef = useRef<HTMLDivElement>(null);
   const wasComposing = useRef(false);
 
   const doneToday = today ? completedOn(habits, today) : 0;
@@ -58,6 +61,19 @@ export default function Home() {
     const timer = window.setTimeout(() => { removedRef.current = null; setRemovedState(null); }, 6000);
     return () => window.clearTimeout(timer);
   }, [removed, toastFocused]);
+  // While the toast shows, reserve its height (plus its 24px offset and a gap) at the bottom of the page and in
+  // scroll-padding, so a control focused behind it (Shift+Tab from Undo) scrolls clear instead of staying hidden.
+  const toastShown = removed !== null;
+  useLayoutEffect(() => {
+    const toast = toastRef.current;
+    if (!toastShown || !toast) return;
+    const rootStyle = document.documentElement.style;
+    const reserve = () => rootStyle.setProperty("--as-toast-space", `${toast.offsetHeight + 32}px`);
+    reserve();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(reserve) : null;
+    observer?.observe(toast);
+    return () => { observer?.disconnect(); rootStyle.removeProperty("--as-toast-space"); };
+  }, [toastShown]);
 
   function closeComposer() {
     setComposing(false);
@@ -82,7 +98,7 @@ export default function Home() {
     habitStore.update((current) => {
       const index = current.findIndex((item) => item.id === habit.id);
       if (index < 0) return current;
-      entry = { habit: current[index], beforeId: current[index + 1]?.id ?? null };
+      entry = { habit: current[index], beforeId: current[index + 1]?.id ?? null, afterId: current[index - 1]?.id ?? null };
       return removeHabit(current, habit.id);
     });
     if (!entry) return;
@@ -99,7 +115,7 @@ export default function Home() {
     const items = removedRef.current?.items;
     if (!items?.length) return;
     // Latest removal first, so each habit goes back before the row that followed it at the time.
-    habitStore.update((current) => items.reduceRight((list, { habit, beforeId }) => restoreHabit(list, habit, beforeId), current));
+    habitStore.update((current) => items.reduceRight((list, { habit, beforeId, afterId }) => restoreHabit(list, habit, beforeId, afterId), current));
     setAnnouncement(items.length === 1 ? `Restored “${items[0].habit.name}”.` : `Restored ${items.length} habits.`);
     closeToast();
   }
@@ -194,12 +210,11 @@ export default function Home() {
                     </div>
                   </div>
                   <ol className="as-days" aria-label={`${habit.name}, last ${WINDOW_DAYS} days`}>
-                    {days.map((day) => {
-                      const { weekday, day: date } = dayParts(day);
+                    {dayLabels.map(({ key: day, weekday, day: date, long }) => {
                       const done = Boolean(habit.checks[day]);
                       return (
                         <li key={day}>
-                          <button type="button" className="as-day" aria-pressed={done} aria-label={`${habit.name}, ${longDay(day)}`} data-today={day === today ? "true" : undefined} onClick={() => toggle(habit, day)}>
+                          <button type="button" className="as-day" aria-pressed={done} aria-label={`${habit.name}, ${long}`} data-today={day === today ? "true" : undefined} onClick={() => toggle(habit, day)}>
                             <span>{weekday}</span>
                             <strong>{date}</strong>
                           </button>
@@ -219,6 +234,7 @@ export default function Home() {
       <p className="as-sr" role="status" aria-live="polite">{announcement}</p>
       {removed ? (
         <div
+          ref={toastRef}
           className="as-toast"
           role="group"
           aria-label="Undo remove"

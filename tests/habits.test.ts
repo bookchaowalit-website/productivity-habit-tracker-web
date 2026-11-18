@@ -89,6 +89,13 @@ describe("App shell helpers", () => {
     expect(restoreHabit([a, b], a, "b")).toHaveLength(2);
   });
 
+  it("restoreHabit puts a last row back right after its old previous row, before rows added since", () => {
+    const c = { id: "c", name: "C", checks: {} };
+    expect(restoreHabit([a, c], b, null, "a").map((h) => h.id)).toEqual(["a", "b", "c"]);
+    expect(restoreHabit([a, c], b, "gone", "a").map((h) => h.id)).toEqual(["a", "b", "c"]);
+    expect(restoreHabit([c], b, null, "gone").map((h) => h.id)).toEqual(["c", "b"]);
+  });
+
   it("longDay, dayParts and streakLabel", () => {
     expect(longDay("2026-11-14")).toBe("Saturday 14 November");
     expect(dayParts("2026-11-14")).toEqual({ weekday: "Sat", day: 14 });

@@ -120,10 +120,13 @@ export const todayStore = {
 };
 
 /** Put a removed lane back before its old neighbour (or at the end when the neighbour is gone); never twice. */
-export function restoreHabit(habits: Habit[], habit: Habit, beforeId: string | null): Habit[] {
+export function restoreHabit(habits: Habit[], habit: Habit, beforeId: string | null, afterId: string | null = null): Habit[] {
   if (habits.some((entry) => entry.id === habit.id)) return habits;
-  const at = beforeId ? habits.findIndex((entry) => entry.id === beforeId) : -1;
-  return at < 0 ? [...habits, habit] : [...habits.slice(0, at), habit, ...habits.slice(at)];
+  // Before the old next row; else right after the old previous row (so rows added since stay after it); else at the end.
+  const before = beforeId ? habits.findIndex((entry) => entry.id === beforeId) : -1;
+  const after = before < 0 && afterId ? habits.findIndex((entry) => entry.id === afterId) : -1;
+  const at = before >= 0 ? before : after >= 0 ? after + 1 : habits.length;
+  return [...habits.slice(0, at), habit, ...habits.slice(at)];
 }
 
 /** "Saturday, 14 November" for a day key, in the visitor's own calendar. */
