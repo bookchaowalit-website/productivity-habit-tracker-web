@@ -70,6 +70,25 @@ describe("last 14 days", () => {
     expect($<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.checked).toBe(true);
   });
 
+  it("a tap after midnight on a box ticked yesterday ticks the new day (state comes from the new day, not the stale box)", () => {
+    act(() => root.unmount());
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 18, 23, 59, 59));
+    habitStore.update(() => SEED_HABITS.map((h) => (h.id === "read" ? { ...h, checks: { "2026-11-18": true } } : h)));
+    root = createRoot(host);
+    act(() => root.render(<Home />));
+    expect($<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.checked).toBe(true);
+    vi.setSystemTime(new Date(2026, 10, 19, 0, 0, 1));
+    act(() => { $<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.click(); });
+    let checks = saved().find((h: { name: string }) => h.name === "Read before bed").checks;
+    expect(checks).toEqual({ "2026-11-18": true, "2026-11-19": true });
+    expect(host.querySelector('[role="status"]')!.textContent).toBe("Read before bed: done on Thursday 19 November.");
+    // Same day now: the next tap follows the box as shown (ticked), so it unticks the new day only.
+    act(() => { $<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.click(); });
+    checks = saved().find((h: { name: string }) => h.name === "Read before bed").checks;
+    expect(checks).toEqual({ "2026-11-18": true });
+  });
+
   it("shows 14 days per habit, marks today, and a tap on yesterday counts toward the streak", () => {
     press(button("Last 14 days", $(".as-side")!));
     expect($("h1")!.textContent).toBe("Last 14 days");

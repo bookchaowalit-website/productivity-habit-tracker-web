@@ -321,7 +321,12 @@ export default function Home() {
                   return (
                     <li className="as-row as-row-check as-row-habit" key={habit.id} data-renaming={renaming?.id === habit.id ? "true" : undefined}>
                       <label className="as-check">
-                        <input type="checkbox" checked={done} disabled={!today} aria-label={`Done today: ${habit.name}`} onChange={(event) => setDone(habit, todayStore.getSnapshot(), event.currentTarget.checked)} />
+                        <input type="checkbox" checked={done} disabled={!today} aria-label={`Done today: ${habit.name}`} onChange={(event) => {
+                          // After midnight the box still shows yesterday: the tap means "flip the new day as it is saved".
+                          const day = todayStore.getSnapshot();
+                          const chosen = day === today ? event.currentTarget.checked : !habitStore.getSnapshot().find((entry) => entry.id === habit.id)?.checks[day];
+                          setDone(habit, day, chosen);
+                        }} />
                         <span aria-hidden="true" />
                       </label>
                       {renaming?.id === habit.id ? (

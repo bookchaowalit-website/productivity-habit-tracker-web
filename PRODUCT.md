@@ -31,7 +31,8 @@ A portfolio visitor who wants to try a small daily habit grid.
   mouse pointer rests on it, so a mouse or touch user who waits longer than 6 seconds loses the habit and its history.
   There is no trash or "recently removed" list: that would be a new feature, not a fix (decision 2026-11-18; the 6 s
   batch Undo is the App shell design).
-- **Date rollover:** a tick on Today records the local date at the moment of the tap. The rest of the screen (header,
+- **Date rollover:** a tick on Today records the local date at the moment of the tap, and after midnight it flips that
+  new day's saved state (not the state the not-yet-refreshed box shows). The rest of the screen (header,
   grid) moves to the new day on the next re-render or within a minute.
 - **Two open tabs:** each write builds on the latest saved data, but a tab only redraws when the browser delivers the
   `storage` event, so for a moment a tab can show data another tab has already changed.
@@ -40,6 +41,10 @@ A portfolio visitor who wants to try a small daily habit grid.
 - **Undo with clashing names in one batch:** if `Run (2)` and `Run` are removed together and another tab then adds
   `Run`, Undo restores `Run` as `Run (2)` first, so the habit that was `Run (2)` comes back as `Run (2) (2)`. Nothing
   is lost and each history stays with its habit; only the suffixes differ (Codex review 2026-11-19, P3, accepted).
+- **Rename then switch views before typing:** the field still holds its focus request, so the form in the other view
+  takes focus back from the view button and selects the name (Codex review 2026-11-19, P3, accepted).
+- **Old over-long name whose first 60 characters match another habit:** Save stays enabled, but the shortened name
+  is refused as a duplicate and the field shows no reason (Codex review 2026-11-19, P3, accepted).
 
 ## Live URL and deploy state
 
