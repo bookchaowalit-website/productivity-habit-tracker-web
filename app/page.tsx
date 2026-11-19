@@ -76,11 +76,9 @@ export default function Home() {
   const [toastFocused, setToastFocused] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   // The habit being renamed, and the one whose Rename button gets focus back once the field closes.
-  // The habit being renamed with its draft (kept across views), whether its field should take focus, and a name the
-  // store refused although this screen did not know it was taken.
-  const [renaming, setRenaming] = useState<{ id: string; draft: string; focus: boolean; refused: string | null } | null>(null);
-  // A name the store refused although this screen did not know it was taken (another tab saved it first).
-  const [addRefused, setAddRefused] = useState<string | null>(null);
+  // The habit being renamed with its draft (kept across views) and whether its field should take focus. A refused
+  // name is not remembered: the hint always comes from the latest saved list, which the refusing write just re-read.
+  const [renaming, setRenaming] = useState<{ id: string; draft: string; focus: boolean } | null>(null);
   const refocusRename = useRef<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const newRef = useRef<HTMLButtonElement>(null);
@@ -126,7 +124,6 @@ export default function Home() {
   function closeComposer() {
     setComposing(false);
     setName("");
-    setAddRefused(null);
   }
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -140,19 +137,24 @@ export default function Home() {
       added = next !== current;
       return next;
     });
-    if (!added) {
-      setAddRefused(name.trim());
-      return;
-    }
+    // Refused: the write re-read the latest list (another tab saved this name first), so the hint now says so.
+    if (!added) return;
     setAnnouncement(`Added “${name.trim()}”.`);
     closeComposer();
   }
   // Today's checkbox passes the date read at the moment of the tap, not the render's `today`: a page left open past
   // midnight must record the new day (the re-render after the write then shows the new day everywhere).
-  function toggle(habit: Habit, day: string) {
-    const wasDone = Boolean(habit.checks[day]);
-    habitStore.update((current) => toggleCheck(current, habit.id, day));
-    setAnnouncement(`${habit.name}: ${wasDone ? "not done" : "done"} on ${longDay(day)}.`);
+  // `done` is the state the person chose from what the screen showed, so a tick another tab already saved is kept, not
+  // flipped back off; the announcement reads what was actually saved.
+  function setDone(habit: Habit, day: string, done: boolean) {
+    let saved: boolean | null = null;
+    habitStore.update((current) => {
+      const latest = current.find((entry) => entry.id === habit.id);
+      if (!latest) return current;
+      saved = done;
+      return Boolean(latest.checks[day]) === done ? current : toggleCheck(current, habit.id, day);
+    });
+    setAnnouncement(saved === null ? `“${habit.name}” was removed in another tab.` : `${habit.name}: ${saved ? "done" : "not done"} on ${longDay(day)}.`);
   }
   function remove(habit: Habit, viaKeyboard: boolean) {
     // Read the habit (with its latest check-ins) and its neighbour inside the same store update.
@@ -184,17 +186,17 @@ export default function Home() {
       return result;
     });
     if (!renamed) {
-      setRenaming({ ...renaming, focus: false, refused: next });
+      setRenaming({ ...renaming, focus: false });
       return;
     }
     setAnnouncement(`Renamed “${habit.name}” to “${next}”.`);
     closeRename(habit);
   }
   /** Why a name cannot be used right now, or null. `exceptId` is the habit being renamed. */
-  function nameProblem(value: string, exceptId?: string, refused?: string | null): string | null {
+  function nameProblem(value: string, exceptId?: string): string | null {
     const clean = value.trim();
     if (!clean) return exceptId ? "A name is required." : null;
-    if (hasHabitNamed(habits, clean, exceptId) || (refused && refused.toLocaleLowerCase() === clean.toLocaleLowerCase())) return `You already track “${clean}”.`;
+    if (hasHabitNamed(habits, clean, exceptId)) return `You already track “${clean}”.`;
     // A habit waiting in the Undo toast still owns its name, so Undo can never bring back a second habit with it.
     const waiting = removed?.items.find(({ habit }) => habit.id !== exceptId && habit.name.trim().toLocaleLowerCase() === clean.toLocaleLowerCase());
     if (waiting) return `“${waiting.habit.name}” is waiting in Undo. Undo it or pick another name.`;
@@ -206,7 +208,7 @@ export default function Home() {
       <RenameForm
         habit={habit}
         draft={renaming.draft}
-        problem={nameProblem(renaming.draft, habit.id, renaming.refused)}
+        problem={nameProblem(renaming.draft, habit.id)}
         focusOnMount={renaming.focus}
         onDraft={(draft) => setRenaming({ ...renaming, draft, focus: false })}
         onSave={() => saveRename(habit)}
@@ -217,7 +219,7 @@ export default function Home() {
   function habitActions(habit: Habit) {
     return (
       <>
-        <button type="button" className="as-plain as-icon as-edit" data-rename={habit.id} aria-label={`Rename ${habit.name}`} onClick={() => setRenaming({ id: habit.id, draft: habit.name, focus: true, refused: null })}><PencilIcon /></button>
+        <button type="button" className="as-plain as-icon as-edit" data-rename={habit.id} aria-label={`Rename ${habit.name}`} onClick={() => setRenaming({ id: habit.id, draft: habit.name, focus: true })}><PencilIcon /></button>
         <button type="button" className="as-plain as-icon" aria-label={`Remove ${habit.name}`} onClick={(event) => remove(habit, event.detail === 0)}><XIcon /></button>
       </>
     );
@@ -245,7 +247,7 @@ export default function Home() {
   }
 
   const trimmedName = name.trim();
-  const addProblem = nameProblem(name, undefined, addRefused);
+  const addProblem = nameProblem(name);
   const heading = view === "Today" ? "Today" : "Last 14 days";
   const summary = !today
     ? `${habits.length} ${habits.length === 1 ? "habit" : "habits"}`
@@ -281,7 +283,7 @@ export default function Home() {
           {composing ? (
             <form className="as-composer" onSubmit={add} aria-label="New habit">
               <label className="as-field">Habit
-                <input ref={nameRef} value={name} maxLength={NAME_MAX} onChange={(event) => { setName(event.target.value); setAddRefused(null); }} placeholder="Something small you can do every day" autoComplete="off" aria-describedby="habit-name-hint" aria-invalid={addProblem ? true : undefined} />
+                <input ref={nameRef} value={name} maxLength={NAME_MAX} onChange={(event) => setName(event.target.value)} placeholder="Something small you can do every day" autoComplete="off" aria-describedby="habit-name-hint" aria-invalid={addProblem ? true : undefined} />
               </label>
               <div className="as-composer-foot">
                 <span id="habit-name-hint" className="as-hint">{addProblem ?? `Tick it off on the days you do it. Up to ${NAME_MAX} characters.`}</span>
@@ -319,7 +321,7 @@ export default function Home() {
                   return (
                     <li className="as-row as-row-check as-row-habit" key={habit.id} data-renaming={renaming?.id === habit.id ? "true" : undefined}>
                       <label className="as-check">
-                        <input type="checkbox" checked={done} disabled={!today} aria-label={`Done today: ${habit.name}`} onChange={() => toggle(habit, todayStore.getSnapshot())} />
+                        <input type="checkbox" checked={done} disabled={!today} aria-label={`Done today: ${habit.name}`} onChange={(event) => setDone(habit, todayStore.getSnapshot(), event.currentTarget.checked)} />
                         <span aria-hidden="true" />
                       </label>
                       {renaming?.id === habit.id ? (
@@ -363,7 +365,7 @@ export default function Home() {
                       const done = Boolean(habit.checks[day]);
                       return (
                         <li key={day}>
-                          <button type="button" className="as-day" aria-pressed={done} aria-label={`${habit.name}, ${long}${day === today ? ", today" : ""}`} data-today={day === today ? "true" : undefined} aria-current={day === today ? "date" : undefined} onClick={() => toggle(habit, day)}>
+                          <button type="button" className="as-day" aria-pressed={done} aria-label={`${habit.name}, ${long}${day === today ? ", today" : ""}`} data-today={day === today ? "true" : undefined} aria-current={day === today ? "date" : undefined} onClick={() => setDone(habit, day, !done)}>
                             <span>{day === today ? "Today" : weekday}</span>
                             <strong>{date}</strong>
                           </button>

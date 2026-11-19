@@ -340,3 +340,67 @@ describe("names and Undo (Codex review 2026-11-19)", () => {
     expect(document.activeElement).toBe(historyButton);
   });
 });
+
+describe("final Codex round (2026-11-19)", () => {
+  const otherTabSaves = (list: unknown) => localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  const submit = (form: Element) => act(() => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+  const status = () => host.querySelector('[role="status"]')!.textContent;
+
+  it("a Today tick saves the state the person chose, even when another tab already ticked it", () => {
+    const box = $<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!;
+    expect(box.checked).toBe(false);
+    otherTabSaves(SEED_HABITS.map((h) => (h.id === "read" ? { ...h, checks: { [TODAY]: true } } : h)));
+    act(() => { box.click(); });
+    expect(saved()[1].checks[TODAY]).toBe(true);
+    expect(status()).toMatch(/^Read before bed: done on /);
+    expect($<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.checked).toBe(true);
+  });
+
+  it("an untick saves not done, even when another tab already unticked it", () => {
+    const box = $<HTMLInputElement>('[aria-label="Done today: Move for 20 min"]')!;
+    act(() => { box.click(); });
+    expect(saved()[0].checks[TODAY]).toBe(true);
+    otherTabSaves(saved().map((h: { id: string }) => (h.id === "move" ? { ...h, checks: {} } : h)));
+    act(() => { box.click(); });
+    expect(saved()[0].checks[TODAY]).toBeUndefined();
+    expect(status()).toMatch(/^Move for 20 min: not done on /);
+  });
+
+  it("a day in the 14-day grid also saves the shown choice", () => {
+    press(button("Last 14 days", $(".as-side")!));
+    otherTabSaves(SEED_HABITS.map((h) => (h.id === "move" ? { ...h, checks: { [YESTERDAY]: true } } : h)));
+    const cell = [...host.querySelectorAll<HTMLButtonElement>(".as-habit:first-child .as-day")].at(-2)!;
+    expect(cell.getAttribute("aria-pressed")).toBe("false");
+    press(cell);
+    expect(saved()[0].checks[YESTERDAY]).toBe(true);
+  });
+
+  it("a rename field emptied and refilled with the original name can be saved again", () => {
+    press($('[aria-label="Rename Read before bed"]')!);
+    const field = $<HTMLInputElement>('[aria-label="New name for Read before bed"]')!;
+    type(field, "");
+    expect(button("Save").disabled).toBe(true);
+    expect(host.textContent).toContain("A name is required.");
+    type(field, "Read before bed");
+    expect(button("Save").disabled).toBe(false);
+    expect(field.getAttribute("aria-invalid")).toBeNull();
+    submit(field.form!);
+    expect($('[aria-label="New name for Read before bed"]')).toBeNull();
+    expect(rowNames()).toEqual(["Move for 20 min", "Read before bed", "One deep-work block"]);
+  });
+
+  it("a refused name is not remembered: once the other tab frees it, Add works without retyping", () => {
+    press(button("New habit"));
+    const input = $<HTMLInputElement>('input[placeholder^="Something small"]')!;
+    type(input, "Walk");
+    otherTabSaves([...SEED_HABITS, { id: "other", name: "Walk", checks: {} }]);
+    submit(input.form!);
+    expect($("#habit-name-hint")!.textContent).toBe("You already track “Walk”.");
+    otherTabSaves(SEED_HABITS);
+    act(() => { window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY })); });
+    expect(button("Add").disabled).toBe(false);
+    submit(input.form!);
+    expect(saved().map((h: { name: string }) => h.name)).toContain("Walk");
+    expect($(".as-composer")).toBeNull();
+  });
+});

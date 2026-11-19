@@ -35,6 +35,11 @@ A portfolio visitor who wants to try a small daily habit grid.
   grid) moves to the new day on the next re-render or within a minute.
 - **Two open tabs:** each write builds on the latest saved data, but a tab only redraws when the browser delivers the
   `storage` event, so for a moment a tab can show data another tab has already changed.
+- **Names over 60 characters** (saved by an older version before the limit): Rename opens with the full name, and
+  Save shortens a name still over 60 characters to 60 without saying so (Codex review 2026-11-19, P3, accepted).
+- **Undo with clashing names in one batch:** if `Run (2)` and `Run` are removed together and another tab then adds
+  `Run`, Undo restores `Run` as `Run (2)` first, so the habit that was `Run (2)` comes back as `Run (2) (2)`. Nothing
+  is lost and each history stays with its habit; only the suffixes differ (Codex review 2026-11-19, P3, accepted).
 
 ## Live URL and deploy state
 
