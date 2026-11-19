@@ -300,3 +300,23 @@ html { scroll-padding-top: 64px; scroll-padding-bottom: calc(16px + var(--as-toa
   .as-day[aria-pressed="true"] { forced-color-adjust: none; border-color: Highlight; background: Highlight; color: HighlightText; }
   .as-day[aria-pressed="true"] span { color: HighlightText; }
 }
+
+/* Review 2026-11-18. */
+/* Disabled filled buttons: a solid grey chip (--as-grey on --as-selected, 6.5:1) instead of 40% opacity (about 1.8:1). */
+.as-button:disabled { opacity: 1; background: var(--as-selected); color: var(--as-grey); }
+/* Phones: a 358px card leaves 334px, enough for 7 × 44px days with 4px gaps, so two weeks stay 7 + 7. */
+@container (min-width: 356px) { .as-days { grid-template-columns: repeat(7, minmax(44px, 1fr)); gap: 4px; padding: 0 12px 16px; } }
+@container (min-width: 380px) { .as-days { gap: 6px; padding: 0 16px 16px; } }
+/* Habit rows: tick, name, Rename, Remove. Renaming puts the form in place of the name and both buttons. */
+.as-row-check.as-row.as-row-habit { grid-template-columns: 44px minmax(0, 1fr) 44px 44px; gap: 4px 8px; }
+.as-row-check.as-row.as-row-habit[data-renaming="true"] { grid-template-columns: 44px minmax(0, 1fr); }
+.as-plain.as-icon.as-edit:hover { color: var(--as-fg); }
+.as-goal-actions { display: flex; flex: none; gap: 0; margin: -8px -8px 0 0; }
+.as-rename { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; width: 100%; min-width: 0; }
+.as-rename input { width: 100%; min-width: 0; min-height: 44px; padding: 0 12px; border: 1px solid var(--as-field-line); border-radius: 10px; background: var(--as-bg); font-size: 16px; }
+.as-rename input:focus-visible { outline: 3px solid var(--as-focus); outline-offset: 0; }
+.as-rename-actions { display: flex; gap: 4px; }
+.as-rename-hint { grid-column: 1 / -1; font-size: 13px; }
+@media (max-width: 520px) { .as-rename { grid-template-columns: minmax(0, 1fr); } .as-rename-actions { justify-content: flex-end; } }
+/* Same height as the real card before hydration, so the list below does not jump. */
+.as-progress-pending .as-progress-text strong { color: var(--as-muted); }

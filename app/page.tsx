@@ -3,8 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { AppFoot, AppTop, ListButton, Pill, PlusIcon } from "@/components/app-shell";
 import {
-  WINDOW_DAYS, addHabit, completedOn, currentStreak, dayParts, daysBack, habitStore, longDay, removeHabit, restoreHabit, signalsIn,
-  streakLabel, todayStore, toggleCheck, type Habit,
+  NAME_MAX, WINDOW_DAYS, addHabit, completedOn, currentStreak, dayParts, daysBack, habitStore, hasHabitNamed, longDay, removeHabit,
+  renameHabit, restoreHabit, signalsIn, streakLabel, todayStore, toggleCheck, type Habit,
 } from "@/lib/habits";
 
 type View = "Today" | "History";
@@ -16,6 +16,35 @@ const removedLabel = (items: RemovedEntry[]) => (items.length === 1 ? `Removed �
 function createId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
   return `habit-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const PencilIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" /></svg>
+);
+
+/** Inline rename: Enter or Save keeps the new name (check-ins stay), Escape or Cancel keeps the old one. */
+function RenameForm({ habit, habits, onDone }: { habit: Habit; habits: Habit[]; onDone: (name: string | null) => void }) {
+  const [draft, setDraft] = useState(habit.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
+  const clean = draft.trim();
+  const duplicate = clean !== "" && hasHabitNamed(habits, clean, habit.id);
+  const hintId = `rename-hint-${habit.id}`;
+  return (
+    <form
+      className="as-rename"
+      aria-label={`Rename ${habit.name}`}
+      onSubmit={(event) => { event.preventDefault(); if (clean && !duplicate) onDone(clean); }}
+      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onDone(null); } }}
+    >
+      <input ref={inputRef} value={draft} maxLength={NAME_MAX} onChange={(event) => setDraft(event.target.value)} aria-label={`New name for ${habit.name}`} aria-describedby={hintId} aria-invalid={duplicate || !clean ? true : undefined} autoComplete="off" />
+      <div className="as-rename-actions">
+        <button type="button" className="as-plain" onClick={() => onDone(null)}>Cancel</button>
+        <button type="submit" className="as-button" disabled={!clean || duplicate}>Save</button>
+      </div>
+      <span id={hintId} className="as-hint as-rename-hint">{duplicate ? `You already track “${clean}”.` : !clean ? "A name is required." : "Check-ins stay with the habit."}</span>
+    </form>
+  );
 }
 
 const XIcon = () => (
@@ -39,6 +68,9 @@ export default function Home() {
   const setRemoved = (batch: RemovedBatch | null) => { removedRef.current = batch; setRemovedState(batch); };
   const [toastFocused, setToastFocused] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  // The habit being renamed, and the one whose Rename button gets focus back once the field closes.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const refocusRename = useRef<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const newRef = useRef<HTMLButtonElement>(null);
   const undoRef = useRef<HTMLButtonElement>(null);
@@ -55,6 +87,11 @@ export default function Home() {
     wasComposing.current = composing;
   }, [composing]);
   useEffect(() => { if (removed?.viaKeyboard) undoRef.current?.focus(); }, [removed]);
+  useEffect(() => {
+    if (renaming || !refocusRename.current) return;
+    document.querySelector<HTMLButtonElement>(`[data-rename="${CSS.escape(refocusRename.current)}"]`)?.focus();
+    refocusRename.current = null;
+  }, [renaming, view]);
   // The toast closes 6 s after the latest removal (each removal restarts it), but never while it holds focus.
   useEffect(() => {
     if (!removed || toastFocused) return;
@@ -81,9 +118,10 @@ export default function Home() {
   }
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const next = addHabit(habits, name, createId());
-    if (next === habits) return;
-    habitStore.update(() => next);
+    const id = createId();
+    if (addHabit(habits, name, id) === habits) return;
+    // Add on the latest saved list, so another tab's habits stay and a name it just added is not added twice.
+    habitStore.update((current) => addHabit(current, name, id));
     setAnnouncement(`Added “${name.trim()}”.`);
     closeComposer();
   }
@@ -108,6 +146,22 @@ export default function Home() {
     setRemoved({ items, viaKeyboard });
     setAnnouncement(`${removedLabel(items)}. Undo is available for a few seconds.`);
   }
+  function finishRename(habit: Habit, next: string | null) {
+    if (next !== null && next !== habit.name) {
+      habitStore.update((current) => renameHabit(current, habit.id, next));
+      setAnnouncement(`Renamed “${habit.name}” to “${next}”.`);
+    }
+    refocusRename.current = habit.id;
+    setRenaming(null);
+  }
+  function habitActions(habit: Habit) {
+    return (
+      <>
+        <button type="button" className="as-plain as-icon as-edit" data-rename={habit.id} aria-label={`Rename ${habit.name}`} onClick={() => setRenaming(habit.id)}><PencilIcon /></button>
+        <button type="button" className="as-plain as-icon" aria-label={`Remove ${habit.name}`} onClick={(event) => remove(habit, event.detail === 0)}><XIcon /></button>
+      </>
+    );
+  }
   function closeToast() {
     setRemoved(null);
     setToastFocused(false);
@@ -122,6 +176,8 @@ export default function Home() {
     closeToast();
   }
 
+  const trimmedName = name.trim();
+  const duplicateName = trimmedName !== "" && hasHabitNamed(habits, trimmedName);
   const heading = view === "Today" ? "Today" : "Last 14 days";
   const summary = !today
     ? `${habits.length} ${habits.length === 1 ? "habit" : "habits"}`
@@ -138,8 +194,8 @@ export default function Home() {
         <aside className="as-side" aria-label="Views">
           <h2>Views</h2>
           <ul className="as-lists">
-            <ListButton label="Today" count={doneToday} current={view === "Today"} onSelect={() => setView("Today")} />
-            <ListButton label="Last 14 days" count={checkIns} current={view === "History"} onSelect={() => setView("History")} />
+            <ListButton label="Today" count={doneToday} countText={today ? `${doneToday}/${habits.length}` : `–/${habits.length}`} countLabel={today ? `${doneToday} of ${habits.length} done` : `${habits.length} habits`} current={view === "Today"} onSelect={() => setView("Today")} />
+            <ListButton label="Last 14 days" count={checkIns} countLabel={`${checkIns} ${checkIns === 1 ? "check-in" : "check-ins"}`} current={view === "History"} onSelect={() => setView("History")} />
           </ul>
         </aside>
 
@@ -157,13 +213,13 @@ export default function Home() {
           {composing ? (
             <form className="as-composer" onSubmit={add} aria-label="New habit">
               <label className="as-field">Habit
-                <input ref={nameRef} value={name} onChange={(event) => setName(event.target.value)} placeholder="Something small you can do every day" autoComplete="off" />
+                <input ref={nameRef} value={name} maxLength={NAME_MAX} onChange={(event) => setName(event.target.value)} placeholder="Something small you can do every day" autoComplete="off" aria-describedby="habit-name-hint" aria-invalid={duplicateName ? true : undefined} />
               </label>
               <div className="as-composer-foot">
-                <span className="as-hint">Tick it off on the days you do it.</span>
+                <span id="habit-name-hint" className="as-hint">{duplicateName ? `You already track “${trimmedName}”.` : `Tick it off on the days you do it. Up to ${NAME_MAX} characters.`}</span>
                 <div className="as-composer-actions">
                   <button type="button" className="as-plain" onClick={closeComposer}>Cancel</button>
-                  <button type="submit" className="as-button" disabled={!name.trim()}>Add</button>
+                  <button type="submit" className="as-button" disabled={!trimmedName || duplicateName}>Add</button>
                 </div>
               </div>
             </form>
@@ -173,7 +229,14 @@ export default function Home() {
             <div className="as-list as-empty"><strong>No habits yet</strong>Press New habit and pick one small thing to do daily.</div>
           ) : view === "Today" ? (
             <div className="as-run">
-              {today ? (
+              {/* Before hydration there is no visitor "today": a same-size placeholder card keeps the list from jumping down. */}
+              {!today ? (
+                <div className="as-progress-card as-progress-pending" aria-hidden="true">
+                  <div className="as-progress-text"><strong>– of {habits.length}</strong><span>done today</span></div>
+                  <Pill tone="grey">Loading</Pill>
+                  <div className="as-progress"><span style={{ width: "0%" }} /></div>
+                </div>
+              ) : (
                 <div className="as-progress-card">
                   <div className="as-progress-text"><strong>{doneToday} of {habits.length}</strong><span>done today</span></div>
                   {doneToday === habits.length ? <Pill tone="green">All done</Pill> : <Pill tone="grey">{habits.length - doneToday} to go</Pill>}
@@ -181,21 +244,27 @@ export default function Home() {
                     <span style={{ width: `${percent}%` }} />
                   </div>
                 </div>
-              ) : null}
+              )}
               <ul className="as-list" aria-label="Today's habits">
                 {habits.map((habit) => {
                   const done = Boolean(today && habit.checks[today]);
                   return (
-                    <li className="as-row as-row-check as-row-habit" key={habit.id}>
+                    <li className="as-row as-row-check as-row-habit" key={habit.id} data-renaming={renaming === habit.id ? "true" : undefined}>
                       <label className="as-check">
                         <input type="checkbox" checked={done} disabled={!today} aria-label={`Done today: ${habit.name}`} onChange={() => toggle(habit, todayStore.getSnapshot())} />
                         <span aria-hidden="true" />
                       </label>
-                      <div>
-                        <h3>{habit.name}</h3>
-                        <p>{today ? streakLabel(currentStreak(habit.checks, today)) : " "}</p>
-                      </div>
-                      <button type="button" className="as-plain as-icon" aria-label={`Remove ${habit.name}`} onClick={(event) => remove(habit, event.detail === 0)}><XIcon /></button>
+                      {renaming === habit.id ? (
+                        <RenameForm habit={habit} habits={habits} onDone={(next) => finishRename(habit, next)} />
+                      ) : (
+                        <>
+                          <div>
+                            <h3>{habit.name}</h3>
+                            <p>{today ? streakLabel(currentStreak(habit.checks, today)) : "Streak loads in a moment"}</p>
+                          </div>
+                          {habitActions(habit)}
+                        </>
+                      )}
                     </li>
                   );
                 })}
@@ -206,18 +275,28 @@ export default function Home() {
               {habits.map((habit) => (
                 <section className="as-goal as-habit" key={habit.id} aria-labelledby={`habit-${habit.id}`}>
                   <div className="as-goal-head">
-                    <div>
-                      <h2 id={`habit-${habit.id}`}>{habit.name}</h2>
-                      <p>{today ? `${streakLabel(currentStreak(habit.checks, today))} · ${days.filter((day) => habit.checks[day]).length} of ${WINDOW_DAYS} days` : " "}</p>
-                    </div>
+                    {renaming === habit.id ? (
+                      <>
+                        <h2 id={`habit-${habit.id}`} className="as-sr">{habit.name}</h2>
+                        <RenameForm habit={habit} habits={habits} onDone={(next) => finishRename(habit, next)} />
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <h2 id={`habit-${habit.id}`}>{habit.name}</h2>
+                          <p>{today ? `${streakLabel(currentStreak(habit.checks, today))} · ${days.filter((day) => habit.checks[day]).length} of ${WINDOW_DAYS} days` : "Streak loads in a moment"}</p>
+                        </div>
+                        <div className="as-goal-actions">{habitActions(habit)}</div>
+                      </>
+                    )}
                   </div>
                   <ol className="as-days" aria-label={`${habit.name}, last ${WINDOW_DAYS} days`}>
                     {dayLabels.map(({ key: day, weekday, day: date, long }) => {
                       const done = Boolean(habit.checks[day]);
                       return (
                         <li key={day}>
-                          <button type="button" className="as-day" aria-pressed={done} aria-label={`${habit.name}, ${long}`} data-today={day === today ? "true" : undefined} aria-current={day === today ? "date" : undefined} onClick={() => toggle(habit, day)}>
-                            <span>{weekday}</span>
+                          <button type="button" className="as-day" aria-pressed={done} aria-label={`${habit.name}, ${long}${day === today ? ", today" : ""}`} data-today={day === today ? "true" : undefined} aria-current={day === today ? "date" : undefined} onClick={() => toggle(habit, day)}>
+                            <span>{day === today ? "Today" : weekday}</span>
                             <strong>{date}</strong>
                           </button>
                         </li>

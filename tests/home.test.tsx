@@ -13,7 +13,11 @@ describe("home page", () => {
 
   it("renders nothing that depends on today on the server, so the static build cannot disagree with the visitor", () => {
     const html = renderToString(<Home />);
-    expect(html).not.toContain("done today");
+    // A same-size placeholder card holds the progress card's place, so hydration does not push the list down.
+    expect(html).toContain('class="as-progress-card as-progress-pending" aria-hidden="true"');
+    expect(html).not.toMatch(/\d+ of 3<\/strong>/);
+    expect(html).not.toContain("0/3");
+    expect(html).toContain("Streak loads in a moment");
     expect(html).not.toContain("day streak");
     expect(html).not.toContain("No streak yet");
     expect(html).toContain("3 habits");

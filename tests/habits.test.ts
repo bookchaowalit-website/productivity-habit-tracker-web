@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SEED_HABITS, addHabit, completedOn, currentStreak, dateKey, dayParts, daysBack, longDay, parseHabits, removeHabit, restoreHabit, signalsIn, streakLabel, toggleCheck } from "@/lib/habits";
+import { NAME_MAX, SEED_HABITS, addHabit, completedOn, currentStreak, dateKey, dayParts, daysBack, hasHabitNamed, longDay, parseHabits, removeHabit, renameHabit, restoreHabit, signalsIn, streakLabel, toggleCheck, type Habit } from "@/lib/habits";
 
 describe("dates", () => {
   it("formats the local calendar day", () => {
@@ -106,5 +106,22 @@ describe("App shell helpers", () => {
     expect(dayParts("2026-11-14")).toEqual({ weekday: "Sat", day: 14 });
     expect(streakLabel(0)).toBe("No streak yet");
     expect(streakLabel(3)).toBe("3-day streak");
+  });
+});
+
+describe("names (review 2026-11-18)", () => {
+  const list: Habit[] = [{ id: "a", name: "Read", checks: { "2026-11-18": true } }, { id: "b", name: "Walk", checks: {} }];
+  it("addHabit skips duplicates ignoring case and spaces, and caps the length", () => {
+    expect(addHabit(list, " read ", "c")).toBe(list);
+    expect(addHabit(list, "x".repeat(80), "c").at(-1)!.name).toHaveLength(NAME_MAX);
+  });
+  it("renameHabit keeps check-ins and refuses blank, duplicate, unchanged or unknown", () => {
+    const next = renameHabit(list, "a", " Read more ");
+    expect(next[0]).toEqual({ id: "a", name: "Read more", checks: { "2026-11-18": true } });
+    expect(renameHabit(list, "a", "  ")).toBe(list);
+    expect(renameHabit(list, "a", "WALK")).toBe(list);
+    expect(renameHabit(list, "a", "Read")).toBe(list);
+    expect(renameHabit(list, "zzz", "New")).toBe(list);
+    expect(hasHabitNamed(list, "read", "a")).toBe(false);
   });
 });

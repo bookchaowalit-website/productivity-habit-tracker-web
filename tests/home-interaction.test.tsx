@@ -209,3 +209,68 @@ describe("remove and undo", () => {
     expect(host.querySelector('[role="status"]')!.textContent).toBe("Restored 2 habits.");
   });
 });
+
+describe("review 2026-11-18", () => {
+  it("counts carry their unit: Today shows done/total, history says check-ins", () => {
+    const side = $(".as-side")!;
+    expect(button("Today", side).textContent).toBe("Today0/3, 0 of 3 done");
+    act(() => { $<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.click(); });
+    expect(button("Today", side).textContent).toBe("Today1/3, 1 of 3 done");
+    expect(button("Last 14 days", side).querySelector(".as-sr")!.textContent).toBe(", 1 check-in");
+  });
+
+  it("marks today in the grid in text and in the button name", () => {
+    press(button("Last 14 days", $(".as-side")!));
+    const todayCell = $('.as-habit [data-today="true"]')!;
+    expect(todayCell.querySelector("span")!.textContent).toBe("Today");
+    expect(todayCell.getAttribute("aria-label")).toMatch(/^Move for 20 min, .+, today$/);
+    expect(host.querySelectorAll('.as-day[aria-label$=", today"]')).toHaveLength(3);
+  });
+
+  it("refuses a duplicate name with a visible reason and caps the length", () => {
+    press(button("New habit"));
+    const input = $<HTMLInputElement>('input[placeholder^="Something small"]')!;
+    expect(input.maxLength).toBe(60);
+    type(input, "  read BEFORE bed ");
+    expect(button("Add").disabled).toBe(true);
+    expect($("#habit-name-hint")!.textContent).toBe("You already track “read BEFORE bed”.");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    act(() => { input.form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    expect(rowNames()).toEqual(["Move for 20 min", "Read before bed", "One deep-work block"]);
+  });
+
+  it("renames a habit in Today and keeps its check-ins; Escape cancels and focus returns to Rename", () => {
+    act(() => { $<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.click(); });
+    press($('[aria-label="Rename Read before bed"]')!);
+    const field = $<HTMLInputElement>('[aria-label="New name for Read before bed"]')!;
+    expect(document.activeElement).toBe(field);
+    type(field, "One deep-work block");
+    expect(button("Save").disabled).toBe(true);
+    expect(host.textContent).toContain("You already track “One deep-work block”.");
+    type(field, "Read 10 pages");
+    act(() => { field.form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    expect(rowNames()).toEqual(["Move for 20 min", "Read 10 pages", "One deep-work block"]);
+    expect(saved()[1]).toMatchObject({ id: "read", name: "Read 10 pages" });
+    expect(saved()[1].checks[TODAY]).toBe(true);
+    expect(document.activeElement).toBe($('[aria-label="Rename Read 10 pages"]'));
+    press($('[aria-label="Rename Read 10 pages"]')!);
+    const again = $<HTMLInputElement>('[aria-label="New name for Read 10 pages"]')!;
+    type(again, "Something else");
+    act(() => { again.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(rowNames()).toEqual(["Move for 20 min", "Read 10 pages", "One deep-work block"]);
+    expect(document.activeElement).toBe($('[aria-label="Rename Read 10 pages"]'));
+  });
+
+  it("the 14-day view has Rename and Remove for each habit", () => {
+    press(button("Last 14 days", $(".as-side")!));
+    press($('.as-habit [aria-label="Rename Move for 20 min"]')!);
+    const field = $<HTMLInputElement>('[aria-label="New name for Move for 20 min"]')!;
+    type(field, "   ");
+    expect(host.textContent).toContain("A name is required.");
+    press(button("Cancel", $(".as-habit")!));
+    expect($("#habit-move")!.textContent).toBe("Move for 20 min");
+    press($('.as-habit [aria-label="Remove Move for 20 min"]')!, 1);
+    expect(host.querySelectorAll(".as-habit")).toHaveLength(2);
+    expect(host.textContent).toContain("Removed “Move for 20 min”");
+  });
+});

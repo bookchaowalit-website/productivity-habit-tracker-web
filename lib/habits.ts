@@ -64,10 +64,27 @@ export function toggleCheck(habits: Habit[], id: string, day: string): Habit[] {
   });
 }
 
-/** Adds a lane; a blank name changes nothing (same array back). */
+/** Longest habit name the composer and rename field accept. */
+export const NAME_MAX = 60;
+
+/** True when another habit (not `exceptId`) already has this name, ignoring case and outer spaces. */
+export function hasHabitNamed(habits: Habit[], name: string, exceptId?: string): boolean {
+  const clean = name.trim().toLocaleLowerCase();
+  return habits.some((habit) => habit.id !== exceptId && habit.name.trim().toLocaleLowerCase() === clean);
+}
+
+/** Adds a lane; a blank or duplicate name changes nothing (same array back). */
 export function addHabit(habits: Habit[], name: string, id: string): Habit[] {
-  const clean = name.trim();
-  return clean ? [...habits, { id, name: clean, checks: {} }] : habits;
+  const clean = name.trim().slice(0, NAME_MAX);
+  return clean && !hasHabitNamed(habits, clean) ? [...habits, { id, name: clean, checks: {} }] : habits;
+}
+
+/** Renames a lane and keeps its check-ins; a blank, duplicate or unchanged name changes nothing (same array back). */
+export function renameHabit(habits: Habit[], id: string, name: string): Habit[] {
+  const clean = name.trim().slice(0, NAME_MAX);
+  const habit = habits.find((entry) => entry.id === id);
+  if (!habit || !clean || clean === habit.name || hasHabitNamed(habits, clean, id)) return habits;
+  return habits.map((entry) => (entry.id === id ? { ...entry, name: clean } : entry));
 }
 
 export function removeHabit(habits: Habit[], id: string): Habit[] {

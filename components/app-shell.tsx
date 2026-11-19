@@ -34,12 +34,17 @@ export function AppFoot({ source }: { source: string }) {
 }
 
 /** One entry in the sidebar list of lists. */
-export function ListButton({ label, count, tone, current, onSelect }: { label: string; count: number; tone?: Tone; current: boolean; onSelect: () => void }) {
+/** `countText` replaces the bare number on screen (e.g. "1/3"); `countLabel` is what a screen reader hears instead (e.g. "1 of 3 done"). */
+export function ListButton({ label, count, countText, countLabel, tone, current, onSelect }: { label: string; count: number; countText?: string; countLabel?: string; tone?: Tone; current: boolean; onSelect: () => void }) {
   return (
     <li>
       <button type="button" aria-current={current ? "true" : undefined} onClick={onSelect}>
         <span>{tone ? <span className="as-dot" data-tone={tone} aria-hidden="true" /> : null}{label}</span>
-        <span className="as-count">{count}</span>
+        {countLabel ? (
+          <span className="as-count"><span aria-hidden="true">{countText ?? count}</span><span className="as-sr">{`, ${countLabel}`}</span></span>
+        ) : (
+          <span className="as-count">{countText ?? count}</span>
+        )}
       </button>
     </li>
   );
