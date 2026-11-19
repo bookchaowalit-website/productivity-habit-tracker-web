@@ -320,3 +320,5 @@ html { scroll-padding-top: 64px; scroll-padding-bottom: calc(16px + var(--as-toa
 @media (max-width: 520px) { .as-rename { grid-template-columns: minmax(0, 1fr); } .as-rename-actions { justify-content: flex-end; } }
 /* Same height as the real card before hydration, so the list below does not jump. */
 .as-progress-pending .as-progress-text strong { color: var(--as-muted); }
+/* A long unbroken name inside a hint ("You already track “WWWW…”.") wraps instead of widening the page. */
+.as-hint { min-width: 0; overflow-wrap: anywhere; }

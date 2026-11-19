@@ -136,9 +136,24 @@ export const todayStore = {
   },
 };
 
-/** Put a removed lane back before its old neighbour (or at the end when the neighbour is gone); never twice. */
-export function restoreHabit(habits: Habit[], habit: Habit, beforeId: string | null, afterId: string | null = null, index?: number): Habit[] {
-  if (habits.some((entry) => entry.id === habit.id)) return habits;
+/** `name`, or `name (2)`, `name (3)` … : the first that no habit in the list uses yet (ignoring case). */
+export function uniqueName(habits: Habit[], name: string): string {
+  if (!hasHabitNamed(habits, name)) return name;
+  for (let n = 2; ; n += 1) {
+    const suffix = ` (${n})`;
+    const candidate = `${name.slice(0, Math.max(1, NAME_MAX - suffix.length)).trimEnd()}${suffix}`;
+    if (!hasHabitNamed(habits, candidate)) return candidate;
+  }
+}
+
+/**
+ * Put a removed lane back before its old neighbour (or at the end when the neighbour is gone); never twice. If a habit
+ * with the same name was added meanwhile (another tab), the restored one keeps its history under "name (2)".
+ */
+export function restoreHabit(habits: Habit[], removed: Habit, beforeId: string | null, afterId: string | null = null, index?: number): Habit[] {
+  if (habits.some((entry) => entry.id === removed.id)) return habits;
+  const name = uniqueName(habits, removed.name);
+  const habit = name === removed.name ? removed : { ...removed, name };
   // Before the old next row; else right after the old previous row (so rows added since stay after it); else at its
   // old index (a lone row comes back before rows added since); else at the end.
   const before = beforeId ? habits.findIndex((entry) => entry.id === beforeId) : -1;

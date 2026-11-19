@@ -22,27 +22,34 @@ const PencilIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" /></svg>
 );
 
-/** Inline rename: Enter or Save keeps the new name (check-ins stay), Escape or Cancel keeps the old one. */
-function RenameForm({ habit, habits, onDone }: { habit: Habit; habits: Habit[]; onDone: (name: string | null) => void }) {
-  const [draft, setDraft] = useState(habit.name);
+/**
+ * Inline rename: Enter or Save keeps the new name (check-ins stay), Escape or Cancel keeps the old one. The draft lives
+ * in Home, so switching between Today and Last 14 days keeps what was typed; focus moves into the field only when
+ * Rename was pressed, not when the other view shows the same form.
+ */
+function RenameForm({ habit, draft, problem, focusOnMount, onDraft, onSave, onCancel }: {
+  habit: Habit; draft: string; problem: string | null; focusOnMount: boolean; onDraft: (value: string) => void; onSave: () => void; onCancel: () => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
-  const clean = draft.trim();
-  const duplicate = clean !== "" && hasHabitNamed(habits, clean, habit.id);
+  useEffect(() => {
+    if (!focusOnMount) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [focusOnMount]);
   const hintId = `rename-hint-${habit.id}`;
   return (
     <form
       className="as-rename"
       aria-label={`Rename ${habit.name}`}
-      onSubmit={(event) => { event.preventDefault(); if (clean && !duplicate) onDone(clean); }}
-      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onDone(null); } }}
+      onSubmit={(event) => { event.preventDefault(); if (!problem) onSave(); }}
+      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onCancel(); } }}
     >
-      <input ref={inputRef} value={draft} maxLength={NAME_MAX} onChange={(event) => setDraft(event.target.value)} aria-label={`New name for ${habit.name}`} aria-describedby={hintId} aria-invalid={duplicate || !clean ? true : undefined} autoComplete="off" />
+      <input ref={inputRef} value={draft} maxLength={NAME_MAX} onChange={(event) => onDraft(event.target.value)} aria-label={`New name for ${habit.name}`} aria-describedby={hintId} aria-invalid={problem ? true : undefined} autoComplete="off" />
       <div className="as-rename-actions">
-        <button type="button" className="as-plain" onClick={() => onDone(null)}>Cancel</button>
-        <button type="submit" className="as-button" disabled={!clean || duplicate}>Save</button>
+        <button type="button" className="as-plain" onClick={onCancel}>Cancel</button>
+        <button type="submit" className="as-button" disabled={problem !== null}>Save</button>
       </div>
-      <span id={hintId} className="as-hint as-rename-hint">{duplicate ? `You already track “${clean}”.` : !clean ? "A name is required." : "Check-ins stay with the habit."}</span>
+      <span id={hintId} className="as-hint as-rename-hint">{problem ?? "Check-ins stay with the habit."}</span>
     </form>
   );
 }
@@ -69,7 +76,11 @@ export default function Home() {
   const [toastFocused, setToastFocused] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   // The habit being renamed, and the one whose Rename button gets focus back once the field closes.
-  const [renaming, setRenaming] = useState<string | null>(null);
+  // The habit being renamed with its draft (kept across views), whether its field should take focus, and a name the
+  // store refused although this screen did not know it was taken.
+  const [renaming, setRenaming] = useState<{ id: string; draft: string; focus: boolean; refused: string | null } | null>(null);
+  // A name the store refused although this screen did not know it was taken (another tab saved it first).
+  const [addRefused, setAddRefused] = useState<string | null>(null);
   const refocusRename = useRef<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const newRef = useRef<HTMLButtonElement>(null);
@@ -115,13 +126,24 @@ export default function Home() {
   function closeComposer() {
     setComposing(false);
     setName("");
+    setAddRefused(null);
   }
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (nameProblem(name) !== null) return;
     const id = createId();
-    if (addHabit(habits, name, id) === habits) return;
-    // Add on the latest saved list, so another tab's habits stay and a name it just added is not added twice.
-    habitStore.update((current) => addHabit(current, name, id));
+    // Add on the latest saved list, so another tab's habits stay and a name it just added is not added twice. Close
+    // and announce only when the habit really went in; otherwise keep the text and say why.
+    let added = false;
+    habitStore.update((current) => {
+      const next = addHabit(current, name, id);
+      added = next !== current;
+      return next;
+    });
+    if (!added) {
+      setAddRefused(name.trim());
+      return;
+    }
     setAnnouncement(`Added “${name.trim()}”.`);
     closeComposer();
   }
@@ -146,18 +168,56 @@ export default function Home() {
     setRemoved({ items, viaKeyboard });
     setAnnouncement(`${removedLabel(items)}. Undo is available for a few seconds.`);
   }
-  function finishRename(habit: Habit, next: string | null) {
-    if (next !== null && next !== habit.name) {
-      habitStore.update((current) => renameHabit(current, habit.id, next));
-      setAnnouncement(`Renamed “${habit.name}” to “${next}”.`);
-    }
+  function closeRename(habit: Habit) {
     refocusRename.current = habit.id;
     setRenaming(null);
+  }
+  function saveRename(habit: Habit) {
+    if (!renaming) return;
+    const next = renaming.draft.trim();
+    if (next === habit.name) return closeRename(habit);
+    // Same rule as Add: close and announce only when the store took the new name.
+    let renamed = false;
+    habitStore.update((current) => {
+      const result = renameHabit(current, habit.id, next);
+      renamed = result !== current;
+      return result;
+    });
+    if (!renamed) {
+      setRenaming({ ...renaming, focus: false, refused: next });
+      return;
+    }
+    setAnnouncement(`Renamed “${habit.name}” to “${next}”.`);
+    closeRename(habit);
+  }
+  /** Why a name cannot be used right now, or null. `exceptId` is the habit being renamed. */
+  function nameProblem(value: string, exceptId?: string, refused?: string | null): string | null {
+    const clean = value.trim();
+    if (!clean) return exceptId ? "A name is required." : null;
+    if (hasHabitNamed(habits, clean, exceptId) || (refused && refused.toLocaleLowerCase() === clean.toLocaleLowerCase())) return `You already track “${clean}”.`;
+    // A habit waiting in the Undo toast still owns its name, so Undo can never bring back a second habit with it.
+    const waiting = removed?.items.find(({ habit }) => habit.id !== exceptId && habit.name.trim().toLocaleLowerCase() === clean.toLocaleLowerCase());
+    if (waiting) return `“${waiting.habit.name}” is waiting in Undo. Undo it or pick another name.`;
+    return null;
+  }
+  function renameForm(habit: Habit) {
+    if (!renaming || renaming.id !== habit.id) return null;
+    return (
+      <RenameForm
+        habit={habit}
+        draft={renaming.draft}
+        problem={nameProblem(renaming.draft, habit.id, renaming.refused)}
+        focusOnMount={renaming.focus}
+        onDraft={(draft) => setRenaming({ ...renaming, draft, focus: false })}
+        onSave={() => saveRename(habit)}
+        onCancel={() => closeRename(habit)}
+      />
+    );
   }
   function habitActions(habit: Habit) {
     return (
       <>
-        <button type="button" className="as-plain as-icon as-edit" data-rename={habit.id} aria-label={`Rename ${habit.name}`} onClick={() => setRenaming(habit.id)}><PencilIcon /></button>
+        <button type="button" className="as-plain as-icon as-edit" data-rename={habit.id} aria-label={`Rename ${habit.name}`} onClick={() => setRenaming({ id: habit.id, draft: habit.name, focus: true, refused: null })}><PencilIcon /></button>
         <button type="button" className="as-plain as-icon" aria-label={`Remove ${habit.name}`} onClick={(event) => remove(habit, event.detail === 0)}><XIcon /></button>
       </>
     );
@@ -171,13 +231,21 @@ export default function Home() {
     const items = removedRef.current?.items;
     if (!items?.length) return;
     // Latest removal first, so each habit goes back before the row that followed it at the time.
-    habitStore.update((current) => items.reduceRight((list, { habit, beforeId, afterId, index }) => restoreHabit(list, habit, beforeId, afterId, index), current));
-    setAnnouncement(items.length === 1 ? `Restored “${items[0].habit.name}”.` : `Restored ${items.length} habits.`);
+    // A name taken meanwhile (another tab) comes back as "name (2)", history kept; say so for a single restore.
+    let restoredAs = items[0].habit.name;
+    habitStore.update((current) => {
+      const next = items.reduceRight((list, { habit, beforeId, afterId, index }) => restoreHabit(list, habit, beforeId, afterId, index), current);
+      restoredAs = next.find((entry) => entry.id === items[0].habit.id)?.name ?? restoredAs;
+      return next;
+    });
+    setAnnouncement(items.length === 1
+      ? restoredAs === items[0].habit.name ? `Restored “${restoredAs}”.` : `Restored “${items[0].habit.name}” as “${restoredAs}” (the name was taken).`
+      : `Restored ${items.length} habits.`);
     closeToast();
   }
 
   const trimmedName = name.trim();
-  const duplicateName = trimmedName !== "" && hasHabitNamed(habits, trimmedName);
+  const addProblem = nameProblem(name, undefined, addRefused);
   const heading = view === "Today" ? "Today" : "Last 14 days";
   const summary = !today
     ? `${habits.length} ${habits.length === 1 ? "habit" : "habits"}`
@@ -213,13 +281,13 @@ export default function Home() {
           {composing ? (
             <form className="as-composer" onSubmit={add} aria-label="New habit">
               <label className="as-field">Habit
-                <input ref={nameRef} value={name} maxLength={NAME_MAX} onChange={(event) => setName(event.target.value)} placeholder="Something small you can do every day" autoComplete="off" aria-describedby="habit-name-hint" aria-invalid={duplicateName ? true : undefined} />
+                <input ref={nameRef} value={name} maxLength={NAME_MAX} onChange={(event) => { setName(event.target.value); setAddRefused(null); }} placeholder="Something small you can do every day" autoComplete="off" aria-describedby="habit-name-hint" aria-invalid={addProblem ? true : undefined} />
               </label>
               <div className="as-composer-foot">
-                <span id="habit-name-hint" className="as-hint">{duplicateName ? `You already track “${trimmedName}”.` : `Tick it off on the days you do it. Up to ${NAME_MAX} characters.`}</span>
+                <span id="habit-name-hint" className="as-hint">{addProblem ?? `Tick it off on the days you do it. Up to ${NAME_MAX} characters.`}</span>
                 <div className="as-composer-actions">
                   <button type="button" className="as-plain" onClick={closeComposer}>Cancel</button>
-                  <button type="submit" className="as-button" disabled={!trimmedName || duplicateName}>Add</button>
+                  <button type="submit" className="as-button" disabled={!trimmedName || addProblem !== null}>Add</button>
                 </div>
               </div>
             </form>
@@ -249,13 +317,13 @@ export default function Home() {
                 {habits.map((habit) => {
                   const done = Boolean(today && habit.checks[today]);
                   return (
-                    <li className="as-row as-row-check as-row-habit" key={habit.id} data-renaming={renaming === habit.id ? "true" : undefined}>
+                    <li className="as-row as-row-check as-row-habit" key={habit.id} data-renaming={renaming?.id === habit.id ? "true" : undefined}>
                       <label className="as-check">
                         <input type="checkbox" checked={done} disabled={!today} aria-label={`Done today: ${habit.name}`} onChange={() => toggle(habit, todayStore.getSnapshot())} />
                         <span aria-hidden="true" />
                       </label>
-                      {renaming === habit.id ? (
-                        <RenameForm habit={habit} habits={habits} onDone={(next) => finishRename(habit, next)} />
+                      {renaming?.id === habit.id ? (
+                        renameForm(habit)
                       ) : (
                         <>
                           <div>
@@ -275,10 +343,10 @@ export default function Home() {
               {habits.map((habit) => (
                 <section className="as-goal as-habit" key={habit.id} aria-labelledby={`habit-${habit.id}`}>
                   <div className="as-goal-head">
-                    {renaming === habit.id ? (
+                    {renaming?.id === habit.id ? (
                       <>
                         <h2 id={`habit-${habit.id}`} className="as-sr">{habit.name}</h2>
-                        <RenameForm habit={habit} habits={habits} onDone={(next) => finishRename(habit, next)} />
+                        {renameForm(habit)}
                       </>
                     ) : (
                       <>

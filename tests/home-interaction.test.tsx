@@ -274,3 +274,69 @@ describe("review 2026-11-18", () => {
     expect(host.textContent).toContain("Removed “Move for 20 min”");
   });
 });
+
+describe("names and Undo (Codex review 2026-11-19)", () => {
+  // Another tab saving without this tab hearing the storage event yet.
+  const otherTabSaves = (list: unknown) => localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  const submit = (form: Element) => act(() => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+
+  it("a name waiting in the Undo toast cannot be added or used for a rename", () => {
+    press($('[aria-label="Remove Read before bed"]')!, 1);
+    press(button("New habit"));
+    const input = $<HTMLInputElement>('input[placeholder^="Something small"]')!;
+    type(input, "read before bed");
+    expect($("#habit-name-hint")!.textContent).toBe("“Read before bed” is waiting in Undo. Undo it or pick another name.");
+    expect(button("Add").disabled).toBe(true);
+    press(button("Cancel", $(".as-composer")!));
+    press($('[aria-label="Rename Move for 20 min"]')!);
+    type($<HTMLInputElement>('[aria-label="New name for Move for 20 min"]')!, "Read before bed");
+    expect(button("Save").disabled).toBe(true);
+    expect(host.textContent).toContain("is waiting in Undo");
+  });
+
+  it("Add keeps the form and the text when another tab saved the same name first", () => {
+    press(button("New habit"));
+    const input = $<HTMLInputElement>('input[placeholder^="Something small"]')!;
+    type(input, "Walk");
+    expect(button("Add").disabled).toBe(false);
+    otherTabSaves([...SEED_HABITS, { id: "other", name: "Walk", checks: {} }]);
+    submit(input.form!);
+    expect($(".as-composer")).not.toBeNull();
+    expect(input.value).toBe("Walk");
+    expect($("#habit-name-hint")!.textContent).toBe("You already track “Walk”.");
+    expect(host.querySelector('[role="status"]')!.textContent).not.toContain("Added");
+    expect(saved().filter((h: { name: string }) => h.name === "Walk")).toHaveLength(1);
+  });
+
+  it("Rename stays open when another tab took the name first", () => {
+    press($('[aria-label="Rename Move for 20 min"]')!);
+    const field = $<HTMLInputElement>('[aria-label="New name for Move for 20 min"]')!;
+    type(field, "Swim");
+    otherTabSaves([...SEED_HABITS, { id: "other", name: "Swim", checks: {} }]);
+    submit(field.form!);
+    expect($('[aria-label="New name for Move for 20 min"]')).not.toBeNull();
+    expect(host.textContent).toContain("You already track “Swim”.");
+    expect(saved().find((h: { id: string }) => h.id === "move").name).toBe("Move for 20 min");
+  });
+
+  it("Undo never makes two habits with one name: a clash comes back as “name (2)” with its history", () => {
+    act(() => { $<HTMLInputElement>('[aria-label="Done today: Read before bed"]')!.click(); });
+    press($('[aria-label="Remove Read before bed"]')!, 1);
+    otherTabSaves([...saved(), { id: "other", name: "Read before bed", checks: {} }]);
+    press(button("Undo", $(".as-toast")!));
+    const list = saved();
+    expect(list.map((h: { name: string }) => h.name)).toEqual(["Move for 20 min", "Read before bed (2)", "One deep-work block", "Read before bed"]);
+    expect(list[1].checks[TODAY]).toBe(true);
+    expect(host.querySelector('[role="status"]')!.textContent).toBe("Restored “Read before bed” as “Read before bed (2)” (the name was taken).");
+  });
+
+  it("a rename draft survives switching views without pulling focus into the field", () => {
+    press($('[aria-label="Rename Read before bed"]')!);
+    type($<HTMLInputElement>('[aria-label="New name for Read before bed"]')!, "Read 20 pages");
+    const historyButton = button("Last 14 days", $(".as-side")!);
+    act(() => historyButton.focus());
+    press(historyButton);
+    expect($<HTMLInputElement>('[aria-label="New name for Read before bed"]')!.value).toBe("Read 20 pages");
+    expect(document.activeElement).toBe(historyButton);
+  });
+});

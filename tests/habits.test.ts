@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAME_MAX, SEED_HABITS, addHabit, completedOn, currentStreak, dateKey, dayParts, daysBack, hasHabitNamed, longDay, parseHabits, removeHabit, renameHabit, restoreHabit, signalsIn, streakLabel, toggleCheck, type Habit } from "@/lib/habits";
+import { NAME_MAX, SEED_HABITS, addHabit, completedOn, currentStreak, dateKey, dayParts, daysBack, hasHabitNamed, longDay, parseHabits, removeHabit, renameHabit, restoreHabit, uniqueName, signalsIn, streakLabel, toggleCheck, type Habit } from "@/lib/habits";
 
 describe("dates", () => {
   it("formats the local calendar day", () => {
@@ -123,5 +123,19 @@ describe("names (review 2026-11-18)", () => {
     expect(renameHabit(list, "a", "Read")).toBe(list);
     expect(renameHabit(list, "zzz", "New")).toBe(list);
     expect(hasHabitNamed(list, "read", "a")).toBe(false);
+  });
+});
+
+describe("uniqueName and restore clashes", () => {
+  const list: Habit[] = [{ id: "a", name: "Read", checks: {} }, { id: "b", name: "read (2)", checks: {} }];
+  it("suffixes the first free number and keeps within NAME_MAX", () => {
+    expect(uniqueName(list, "Walk")).toBe("Walk");
+    expect(uniqueName(list, "READ")).toBe("READ (3)");
+    const long = "x".repeat(NAME_MAX);
+    expect(uniqueName([{ id: "l", name: long, checks: {} }], long)).toHaveLength(NAME_MAX);
+  });
+  it("restoreHabit renames a clashing habit and keeps its checks", () => {
+    const back = restoreHabit(list, { id: "c", name: "Read", checks: { "2026-11-18": true } }, null);
+    expect(back.at(-1)).toEqual({ id: "c", name: "Read (3)", checks: { "2026-11-18": true } });
   });
 });
